@@ -52,8 +52,8 @@ flex pycompile.l
 ```bash
  gcc -o <program file name> parser.tab.c lex.yy.c
 ```
-- This produces <name>.exe
-<br>
+- This produces <name>.exe file
+
 `Note` : The `stack` file is included in order to deal with indentation in a file pycompile.l
 test file is : test py
 
