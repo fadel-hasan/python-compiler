@@ -54,7 +54,7 @@ flex pycompile.l
 ```
 - This produces <name>.exe
 <br>
-`Note`: The `stack` file is included in order to deal with indentation in a file pycompile.l
+`Note` : The `stack` file is included in order to deal with indentation in a file pycompile.l
 test file is : test py
 
 but now is ready to execution ^_____^
