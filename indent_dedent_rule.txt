@@ -1,0 +1,85 @@
+/* 
+  %{
+    if(isEmpty(myStack)) {
+      push(&myStack,0);
+    }
+  %} */
+
+  /* ^[ \t]*     { */
+                /*
+                * Handle indentation as described in Python docs linked above.
+                * Note that this pattern treats leading spaces and leading tabs
+                * equivalently, which could cause some unexpected behavior if
+                * they're combined in a single line.  For the purposes of this
+                * project, that's OK.
+                */
+                /* if (peek(myStack) < (int)yyleng) { */
+                  /*
+                  * If the current indentation level is greater than the
+                  * previous indentation level (stored at the top of the stack),
+                  * then emit an INDENT and push the new indentation level onto
+                  * the stack.
+                  */
+                  
+                  /* push(&myStack,yyleng);
+                  printf("INDENT\n");
+                  return INDENT;
+                } else { */
+                  /*
+                  * If the current indentation level is less than or equal to
+                  * the previous indentation level, pop indentation levels off
+                  * the stack until the top is equal to the current indentation
+                  * level.  Emit a DEDENT for each element popped from the stack.
+                  */
+                  /* while (!isEmpty(myStack) && peek(myStack) != (int)yyleng) {
+                    pop(&myStack);
+                    printf("DEDENT\n");
+                    return DEDENT;
+                  } */
+
+                  /*
+                  * If we popped everythin g off the stack, that means the
+                  * current indentation level didn't match any on the stack,
+                  * which is an indentation error.
+                  */
+                  
+                  /* if (isEmpty(myStack)) {
+                    printf("Error: Incorrect indentation on line %d"
+                      ,yylineno);
+                    return 1;
+                  }
+                }
+              } */
+
+  /* ^[^ \t\n]+  { */
+                /*
+                * If we find a line that's not indented, pop all indentation
+                * levels off the stack, and emit a DEDENT for each one.  Then,
+                * call REJECT, so the next rule matching this token is also
+                * applied.
+                */
+                /* while(peek(myStack) != 0) {
+                  pop(&myStack);
+                  printf("DEDENT\n");
+                  return DEDENT;
+                }
+                REJECT;
+              }
+
+  \r?\n       { */
+                    /* printf("NEWLINE\n");
+                    return NEWLINE;
+              }
+
+  <<EOF>>     { */
+                /*
+                * If we reach the end of the file, pop all indentation levels
+                * off the stack, and emit a DEDENT for each one.
+                */
+                /* while(peek(myStack) != 0) {
+                  pop(&myStack);
+                  printf("DEDENT\n");
+                  return DEDENT;
+                }
+
+              } */

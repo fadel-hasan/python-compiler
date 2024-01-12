@@ -38,10 +38,19 @@ Libraries needed to work with C language
 #define KEYWORDS 2
 #define OPERATOR 4
 #define Delimiters 5
+int indent_stack[100];
+int top = -1;
+int dedent_level = 0;  
+void handle_dedent();
+
+char firstChar;
+char *copyyytext;
 char* string_literal_value = NULL;
 int lno=1;
 struct StackNode* myStack = NULL;
 %}
+%x DEDENTATION
+
 
 /* Regular expressions to match tokens */
 DIGIT [0-9]
@@ -120,90 +129,103 @@ it is match all Delimiters in python:
 Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
 %%
 
+              
 %{
-	if(isEmpty(myStack)) {
-    push(&myStack,0);
-  }
+    if (top == -1) {
+        indent_stack[++top] = 0;
+    }
 %}
 
-^[ \t]*     {
-              /*
-               * Handle indentation as described in Python docs linked above.
-               * Note that this pattern treats leading spaces and leading tabs
-               * equivalently, which could cause some unexpected behavior if
-               * they're combined in a single line.  For the purposes of this
-               * project, that's OK.
-               */
-              if (peek(myStack) < (int)yyleng) {
-                /*
-                 * If the current indentation level is greater than the
-                 * previous indentation level (stored at the top of the stack),
-                 * then emit an INDENT and push the new indentation level onto
-                 * the stack.
-                 */
-                
-                push(&myStack,yyleng);
-                printf("INDENT\n");
-                return INDENT;
-              } else {
-                /*
-                 * If the current indentation level is less than or equal to
-                 * the previous indentation level, pop indentation levels off
-                 * the stack until the top is equal to the current indentation
-                 * level.  Emit a DEDENT for each element popped from the stack.
-                 */
-                while (!isEmpty(myStack) && peek(myStack) != (int)yyleng) {
-                  pop(&myStack);
-                   printf("DEDENT\n");
-                   return DEDENT;
-                }
 
-                /*
-                 * If we popped everythin g off the stack, that means the
-                 * current indentation level didn't match any on the stack,
-                 * which is an indentation error.
-                 */
-                 
-                if (isEmpty(myStack)) {
-                  printf("Error: Incorrect indentation on line %d"
-                    ,yylineno);
-                  return 1;
-                }
-              }
-            }
 
-^[^ \t\n]+  {
-              /*
-               * If we find a line that's not indented, pop all indentation
-               * levels off the stack, and emit a DEDENT for each one.  Then,
-               * call REJECT, so the next rule matching this token is also
-               * applied.
-               */
-              while(peek(myStack) != 0) {
-                pop(&myStack);
-                printf("DEDENT\n");
-                return DEDENT;
-              }
-              REJECT;
-            }
 
 \r?\n       {
-                  printf("NEWLINE\n");
-                   return NEWLINE;
-            }
+    printf("newline = %s in line = %d\n",yytext,yylineno);
+    return NEWLINE;
+}
 
-<<EOF>>     {
-              /*
-               * If we reach the end of the file, pop all indentation levels
-               * off the stack, and emit a DEDENT for each one.
-               */
-              while(peek(myStack) != 0) {
-                pop(&myStack);
-                printf("DEDENT\n");
-                return DEDENT;
-              }
+^[ \t]*\r?\n   { /* Skip blank lines */ }
 
-            }
+^[ \t]*#.*\r?\n    { /* Skip whole-line comments. */ }
+
+#.*$             { /* Skip comments on the same line as a statement. */ }
+
+
+^[^ \t\n]+ {
+    if (indent_stack[top]!= 0){
+        copyyytext=strdup(yytext);
+        firstChar = yytext[0];
+        unput(yytext[0]);
+        BEGIN(DEDENTATION);
+    }
+    else
+    {
+        REJECT;
+    }
+}
+
+^[ \t]+  {
+    if (indent_stack[top] < yyleng) {
+        indent_stack[++top] = yyleng;
+     
+        return INDENT;
+    } else if (indent_stack[top] > yyleng) {
+        dedent_level=yyleng;
+        unput(32);/*32 for space*/
+        BEGIN(DEDENTATION);
+    }
+}
+
+
+<DEDENTATION>[ ] {
+        if (top >= 0 && indent_stack[top] != dedent_level) {
+            handle_dedent();
+          
+            return DEDENT;
+            unput(32);
+        }
+        else
+        {
+            dedent_level=0;
+            BEGIN(INITIAL);
+        }
+
+        if (top == -1) {
+            fprintf(stderr, "Error: Incorrect indentation on line %d\n", yylineno);
+            exit(1);
+        }
+}
+
+<DEDENTATION>[^ \t\n] {
+    if (indent_stack[top] != 0) {
+        top--;
+        unput(yytext[0]);
+      
+        return DEDENT;
+    }
+    else
+    {
+        for (int i = strlen(copyyytext) - 1; i >= 0; i--) {
+            unput(copyyytext[i]);
+        }
+    BEGIN(INITIAL);
+    }
+    
+}
+
+<<EOF>>    {
+    while (top >0) {
+        handle_dedent();
+            printf("dedent = %s in line = %d\n",yytext,yylineno);
+        return DEDENT;
+    }
+    
+    
+}
+
+[ \t]       { /*
+ Ignore spaces that haven't been handled above. */ }
+
 \" 			{
     				BEGIN(STRING1);  // Transition to the STRING start condition when a double quote is encountered
     				string_literal_value = strdup("");  // Initialize the string literal value
@@ -427,3 +449,7 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
         }
 %%
 
+
+void handle_dedent() {
+        top--;
+}

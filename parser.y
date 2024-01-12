@@ -41,14 +41,16 @@ program:  /*empty program*/
        ;
 
 
-statements:
-            statement NEWLINE {printf("one statment\n");}
-          | statements statement NEWLINE {printf("many statment\n");}
+statements: 
+            statement  {printf("one statment\n");}
+          | statements statement  {printf("many statment\n");}
           ;
 
-statement: compound_stmt {printf("compound stmt\n");}
-         | simple_stmt {printf("simple stmt\n");}
+statement: compound_stmt NEWLINE {printf("compound stmt\n");}
+         | simple_stmt NEWLINE {printf("simple stmt\n");}
+         /* | NEWLINE */
          ;
+
 
 simple_stmt:  expression   {printf("expression\n");}
             | assignment   {printf("assignment\n");}
@@ -155,16 +157,6 @@ with_item_list: with_item
 with_item: IDENTIFIER '(' STRING ')' AS IDENTIFIER 
          ;
 
-/* expression
-    : expression '+' expression     
-    | expression '-' expression     
-    | expression MUL expression     
-    | expression '/' expression     
-    | '-' expression  %prec UMINUS  
-    | '(' expression ')'            
-    | atom
-                     
- ; */
 
 
 
@@ -194,19 +186,7 @@ elif_stmt : elif_header block
 ;
 elif_header : ELIF named_expression COLON
 ;
-/* 
-if_stmt: IF named_expression COLON block elif_stmt 
-       | IF named_expression COLON block else_block
-       ;
 
-elif_stmt:
-    | ELIF named_expression COLON block else_block 
-    | elif_stmt ELIF named_expression COLON block else_block
-    ;
-
-else_block:
-    | ELSE COLON block 
-    ; */
 
 named_expression: assignment_expression
                 | comparison
@@ -270,17 +250,17 @@ expression:   primary_expression
             | '(' expression ')'
 ;
 
-for_stmt:  for_header changes block
+for_stmt:  for_header changes COLON block
 
 for_header: FOR IDENTIFIER IN 
 
 changes: IDENTIFIER
         |range
         
-range: RANGE LBRACKET myrange RBRACKET
-    | RANGE LBRACKET myfunc RBRACKET
+range: RANGE '(' myrange ')'
+    | RANGE '(' myfunc ')'
     
-myfunc: IDENTIFIER LBRACKET RBRACKET
+myfunc: IDENTIFIER '(' ')'
 
 myrange : NUMBER 
         | NUMBER ',' NUMBER
@@ -353,8 +333,30 @@ dict_pattern_entry
     : pattern COLON pattern
     ; 
 
+/* expression
+    : expression '+' expression     
+    | expression '-' expression     
+    | expression MUL expression     
+    | expression '/' expression     
+    | '-' expression  %prec UMINUS  
+    | '(' expression ')'            
+    | atom
+                     
+ ; */
 
+/* 
+if_stmt: IF named_expression COLON block elif_stmt 
+       | IF named_expression COLON block else_block
+       ;
 
+elif_stmt:
+    | ELIF named_expression COLON block else_block 
+    | elif_stmt ELIF named_expression COLON block else_block
+    ;
+
+else_block:
+    | ELSE COLON block 
+    ; */
 /* atom:
      IDENTIFIER
     | NUMBER

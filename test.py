@@ -1,3 +1,3 @@
-if x ==0:
-    x =9
-
+for i in x:
+    x=0
+x =9
