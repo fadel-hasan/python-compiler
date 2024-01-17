@@ -3,6 +3,19 @@
 * @description parser of python
 * @author fadel-hasan
 */
+
+%code requires {
+      #include "python_ast_node.hpp"
+      #include <iostream>
+      #include <string>
+}
+
+%union{
+	AstNode* astNode;
+        IdentifierNode* idNode;
+	int d;
+}
+
 %{
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,16 +26,24 @@ void yyerror(const char *);
 extern int yylex();
 extern int yylineno;
 extern char* yytext;
+      AstNode* root = NULL;
+      int n_nodes = 0;
 %}
 
 // tokens
 
-%token IF ELSE ELIF WHILE FOR CLASS AS IS ASSERT CONTINUE BREAK DEL EXCEPT IMPORT IN LAMBDA FINALLY GLOBAL NOT TRUE WITH YIELD FALSE AWAIT PASS RAISE NONE AND TRY FROM NONLOCAL ASYNC OR
-%token ID NUMBER STRING ASSIGN RETURN RANGE  
-%token  MUL  LBRACKET RBRACKET SEMICOLON EQUAL COLON
-%token PRINT KEYWORD IDENTIFIER DEF RSHIFT LSHIFT   
-%token INDENT DEDENT NEWLINE  NEQ  GT GTE LT  LTE MATCH CASE
-
+%token<astNode> IF ELSE ELIF WHILE FOR CLASS AS IS ASSERT CONTINUE BREAK DEL EXCEPT IMPORT IN LAMBDA FINALLY GLOBAL NOT TRUE WITH YIELD FALSE AWAIT PASS RAISE NONE AND TRY FROM NONLOCAL ASYNC OR
+%token<astNode> ID NUMBER STRING ASSIGN RETURN RANGE  
+%token<astNode>  MUL  LBRACKET RBRACKET SEMICOLON EQUAL COLON
+%token<astNode> PRINT KEYWORD IDENTIFIER DEF RSHIFT LSHIFT   
+%token<astNode> INDENT DEDENT NEWLINE  NEQ  GT GTE LT  LTE MATCH CASE
+%type<astNode> program statements statement function_def arg args args_ block function_call assignment
+%type<astNode>  simple_stmt compound_stmt arguments argument global_stmt global_parms nonlocal_stmt nonlocal_parms
+%type<astNode> yield_stmt yield_expr return_stmt return_parms while_stmt while_else with_stmt with_items
+%type<astNode> with_item_list with_item if_stmt if_header elif_else_ elif_else else_stmt elif_stmts elif_stmt
+%type<astNode> elif_header named_expression comparison assignment_expression comp_op decorators class_def class_def_raw
+%type<astNode> primary_expression negated_expression expression for_stmt for_header changes range myfunc myrange try_stmt try_stmts
+%type<astNode> except_block finally_block match_stmt match_cases match_case pattern_list  pattern list_pattern dict_pattern dict_pattern_entries dict_pattern_entry
 %nonassoc EQUAL
 %left '+' '-'
 %left MUL '/'
@@ -36,301 +57,373 @@ extern char* yytext;
 /* program: 
 |         write yyaccept          */
 /* Parser Grammar */
-program:  /*empty program*/
-       | statements {YYACCEPT;}
+program:  /*empty program*/ {$$ = nullptr;}
+       | statements {      root = $$; YYACCEPT; }
        ;
 
 
 statements: 
-            statement  {printf("one statment\n");}
-          | statements statement  {printf("many statment\n");}
+            statement  { $$ = new StatementsNode(); $$->add($1);}
+          | statements statement  {$1->add($2); $$ = $1; }
           ;
 
-statement: compound_stmt NEWLINE {printf("compound stmt\n");}
-         | simple_stmt NEWLINE {printf("simple stmt\n");}
+statement: compound_stmt NEWLINE {$$=$1;}
+         | simple_stmt NEWLINE {$$=$1;}
          /* | NEWLINE */
          ;
 
 
-simple_stmt:  expression   {printf("expression\n");}
-            | assignment   {printf("assignment\n");}
-            | return_stmt  {printf("return stmt\n");}
-            | BREAK        {printf("break stmt\n");}
-            | CONTINUE     {printf("continue stmt\n");}
-            | global_stmt  {printf("global stmt\n");}
-            | nonlocal_stmt {printf("nonlocal stmt\n");}
-            | yield_stmt    {printf("yield stmt\n");}
-            | PASS         {printf("pass\n");}
-            | function_call {printf("function call\n");}
-            ;
+simple_stmt:
+            expression   {{ $$ = $1; }}
+          | assignment   {{ $$ = $1; }}
+          | return_stmt  {{ $$ = $1; }}
+          | BREAK        {{ $$ = new BreakStmtNode(); }}
+          | CONTINUE     {{ $$ = new ContinueStmtNode(); }}
+          | global_stmt  {{ $$ = $1; }}
+          | nonlocal_stmt {{ $$ = $1; }}
+          | yield_stmt    {{ $$ = $1; }}
+          | PASS         {{ $$ = new PassStmtNode(); }}
+          | function_call {{ $$ = $1; }}
+          ;
 
-compound_stmt
-    : function_def {printf("function def\n");}
-    | if_stmt      {printf("if stmt\n");}
-    | class_def    {printf("class def\n");}
-    | with_stmt    {printf("with stmt\n");}
-    | for_stmt     {printf("for stmt\n");}
-    | try_stmt     {printf("try stmt\n");}
-    | while_stmt   {printf("while stmt\n");}
-    | match_stmt   {printf("match stmt\n");}
-    ; 
+compound_stmt:
+     function_def {{ $$ = $1; }}
+    | if_stmt      {{ $$ = $1; }}
+    | class_def    {{ $$ = $1; }}
+    | with_stmt    {{ $$ = $1; }}
+    | for_stmt     {{ $$ = $1; }}
+    | try_stmt     {{ $$ = $1; }}
+    | while_stmt   {{ $$ = $1; }}
+    | match_stmt   {{ $$ = $1; }}
+    ;
 
 function_def: DEF IDENTIFIER '(' args ')' COLON block {
-            printf("Function successfully parsed:\n"); 
+      std::string name = "func" + std::to_string(n_nodes);
+      ++n_nodes;
+      IdentifierNode* idFunc = dynamic_cast<IdentifierNode*>($2);
+      $$ = new FunctionNode(idFunc->value);
+      $$->add($4);
+      $$->add($7);
             };
 
-args  : /* empty params */
-      | args_  
+args  : /* empty params */ {$$ = NULL;}
+      | args_  {$$ = $1;}
       ;
 
-args_ : arg 
-      | args_ ',' arg 
+args_ : arg { $$ = new Args("Args"); $$->add($1); }
+      | args_ ',' arg { $1->add($3); $$ = $1; }
       ;
 
-arg   : IDENTIFIER 
-      | NUMBER 
+arg   : IDENTIFIER {
+        std::string nname = "iden" + std::to_string(n_nodes);
+        ++n_nodes;
+        $1->name=nname;
+        $$ = $1;
+        }
+      | NUMBER {
+        std::string nname = "num" + std::to_string(n_nodes);
+        ++n_nodes;
+        $$ = new NumberNode(nname, $1);
+      }
       ;
 
-block : NEWLINE INDENT statements DEDENT
+block : NEWLINE INDENT statements DEDENT { $$ = $3; }
     ;
 
-function_call: IDENTIFIER '(' arguments ')'
+function_call: IDENTIFIER '(' arguments ')' {   $$ = new FunctionCallNode($1);
+      $$->add($3);}
              ;
 
-arguments: /*empty*/ 
-         | arguments argument
+arguments: /*empty*/ { $$ = new ArgumentsNode();}
+         | arguments argument { $1->add($2);
+                                    $$ = $1;}
          ;
 
-argument:',' primary_expression
+argument:',' primary_expression {$$ = $2;}
         ;
 
-global_stmt: GLOBAL IDENTIFIER global_parms
+global_stmt: GLOBAL IDENTIFIER global_parms {$$ = new GlobalStmtNode($2);
+      if ($3) {
+          for (const auto& param : $3->identifiers) {
+              $$->add(param);
+          }
+      }}
            ;
 
-global_parms: /*empty*/ 
+global_parms: /*empty*/ { $$ = new GlobalStmtNode("");}
             /* | ',' IDENTIFIER  */
-            |  global_parms ',' IDENTIFIER 
+            |  global_parms ',' IDENTIFIER  { $1->add($3);
+                                                 $$ = $1;}
             ;
 
-nonlocal_stmt: NONLOCAL IDENTIFIER nonlocal_parms
+nonlocal_stmt: NONLOCAL IDENTIFIER nonlocal_parms {$$ = new NonlocalStmtNode($2);
+      if ($3) {
+          for (const auto& param : $3->identifiers) {
+              $$->add(param);
+          }
+      }}
              ;
 
-nonlocal_parms: /*empty*/ 
+nonlocal_parms: /*empty*/ { $$ = new NonlocalStatementNode("");}
               /* | ',' IDENTIFIER  */
-              | nonlocal_parms ',' IDENTIFIER
+              | nonlocal_parms ',' IDENTIFIER { $1->add($3);
+                                                $$ = $1;}
               ;
 
-yield_stmt: YIELD yield_expr
+yield_stmt: YIELD yield_expr {    $$ = new YieldStmtNode($2);}
           ;
 
-yield_expr: expression 
+yield_expr: expression {$$ = $1;}
           ;
 
-assignment: IDENTIFIER ASSIGN expression  
+assignment: IDENTIFIER ASSIGN expression  {$$ = new assignmentStatement("assign1");
+                                          std::string nname = "iden" + std::to_string(n_nodes);
+                                          ++n_nodes;
+                                          $1->name=nname;
+                                          $$->add($1);
+                                          $$->add($3);}
           ;
 
-return_stmt: RETURN return_parms 
+return_stmt: RETURN return_parms {    $$ = new ReturnStatementNode($2);
+}
            ;
 
-return_parms:/*empty*/ 
-            | expression 
+return_parms:/*empty*/ {    $$ = nullptr; // No return value 
+                        }
+            | expression { $$ = $1;} 
             ;
 
-while_stmt: WHILE comparison COLON block  while_else
+while_stmt: WHILE comparison COLON block  while_else {    $$ = new WhileStatementNode($2, $4);
+                                                        if ($5) {
+                // Add the else statement to the while statement, or handle it as needed
+                        $$->add($5);}}
           ;
 
-while_else: /*empty*/
-          | else_stmt
+while_else: /*empty*/ { $$ = nullptr;}
+          | else_stmt {$$ = $1;}
           ;
-with_stmt: WITH '(' with_items ')' COLON block
-         | WITH with_items COLON block
+
+
+with_stmt: WITH '(' with_items ')' COLON block {    $$ = new WithStmtNode($3, $6);}
+         | WITH with_items COLON block {    $$ = new WithStmtNode($2, $4);}
          ;
 
-with_items: with_item_list ','
-          | with_item_list
+with_items: with_item_list ',' {    $$ = $1;}
+          | with_item_list {$$ = new WithItemsNode();
+    $$->add($1);}
           ;
 
-with_item_list: with_item
-              | with_item_list ',' with_item
+with_item_list: with_item {$$ = new WithItemList();
+    $$->add($1);}
+              | with_item_list ',' with_item { $1->add($3);
+    $$ = $1;}
               ;
 
-with_item: IDENTIFIER '(' STRING ')' AS IDENTIFIER 
+with_item: IDENTIFIER '(' STRING ')' AS IDENTIFIER { $$ = new WithItem($1, $3, $6);}
          ;
 
 
 
 
-if_stmt : if_header block elif_else_
+if_stmt : if_header block elif_else_ {    $$ = new IfStatementNode($1, $2, $3);}
 
 
-if_header : IF named_expression COLON ;
+if_header : IF named_expression COLON ; {    $$ = new IfHeaderNode($2);}
 
 
-elif_else_ : /* empty no next elif or else*/
-| elif_else ;
+elif_else_ : /* empty no next elif or else*/ {$$ = nullptr;}
+| elif_else {$$ = $1;}
+ ; 
 
 
-elif_else : elif_stmts else_stmt
-| elif_stmts
-| else_stmt
+elif_else : elif_stmts else_stmt {$$ = new ElifElseNode($1, $2);}
+| elif_stmts {$$ = new ElifElseNode($1, nullptr);}
+| else_stmt { std::vector<AstNode*> emptyElifStmts;
+    $$ = new ElifElseNode(emptyElifStmts, $1);}
 ;
 
-else_stmt : ELSE COLON block
+else_stmt : ELSE COLON block {    $$ = new ElseStmtNode($3);}
 ;
 
-elif_stmts : elif_stmt
-| elif_stmt elif_stmts
+elif_stmts : elif_stmt { $$ = new ElifStmtsNode();
+    $$->add($1);}
+| elif_stmt elif_stmts {$2->add($1);
+    $$ = $2;}
 ;
 
-elif_stmt : elif_header block
+elif_stmt : elif_header block {$$ = new ElifStmtNode($1, $2);}
 ;
-elif_header : ELIF named_expression COLON
+elif_header : ELIF named_expression COLON { $$ = new ElifHeaderNode($2);}
 ;
 
 
-named_expression: assignment_expression
-                | comparison
+named_expression: assignment_expression {$$ = $1;}
+                | comparison {$$ = $1;}
     ;
     
-comparison: expression comp_op expression
+comparison: expression comp_op expression {    $$ = new ComparisonNode($1, $2, $3);}
     ;
 
 
 
-assignment_expression: IDENTIFIER ASSIGN expression
+assignment_expression: IDENTIFIER ASSIGN expression {$$ = new AssignmentStatement($1);
+    $$->add($3);}
     /* | conditional_expression */
     ;
 
+comp_op: LT    { $$ = "<"; }
+       | GT    { $$ = ">"; }
+       | EQUAL { $$ = "=="; }
+       | GTE   { $$ = ">="; }
+       | LTE   { $$ = "<="; }
+       | '<>'  { $$ = "<>"; }
+       | NEQ   { $$ = "!="; }
+       | IN    { $$ = "in"; }
+       | NOT IN { $$ = "not in"; }
+       | IS    { $$ = "is"; }
+       /* | IS NOT { $$ = "is not"; } */
+;
 
-comp_op: LT
-    | GT
-    | EQUAL
-    | GTE
-    | LTE
-    | '<>'
-    | NEQ
-    | IN
-    | NOT IN
-    | IS
-    /* | IS NOT  */
-    ;
 
-
-decorators: '@' named_expression NEWLINE decorators
-          | '@' named_expression NEWLINE
+decorators: '@' named_expression NEWLINE decorators { $$ = new DecoratorsNode($2);
+    $$->add($4);}
+          | '@' named_expression NEWLINE { $$ = new DecoratorsNode($2);}
           ;
 
-class_def: decorators class_def_raw
-         | class_def_raw
+class_def: decorators class_def_raw {$$ = new ClassDefNode($1, $2);}
+         | class_def_raw {$$ = new ClassDefNode(nullptr, $1);}
          ;
 
-class_def_raw: CLASS IDENTIFIER COLON block;
+class_def_raw: CLASS IDENTIFIER COLON block; {$$ = new ClassDefRawNode($2, $4);}
 
 
 primary_expression
-  : IDENTIFIER
-  | NUMBER
-  | TRUE
-  | FALSE
+  : IDENTIFIER {      $$ = new PrimaryExpressionNode($1);}
+  | NUMBER {      $$ = new PrimaryExpressionNode(std::to_string($1));}
+  | TRUE {      $$ = new PrimaryExpressionNode("true");}
+  | FALSE {      $$ = new PrimaryExpressionNode("true");}
   
   ;
 
 negated_expression
-  : NOT primary_expression
+  : NOT primary_expression {      $$ = new NegatedExpressionNode($2);}
   ;
 
-expression:   primary_expression
-            | negated_expression
-            | expression '+' expression
-            | expression '-' expression
-            | expression MUL expression
-            | expression '/' expression
-            | '-' expression  %prec UMINUS 
-            | '|' expression  %prec UMINUS
-            | '(' expression ')'
+expression:   primary_expression {      $$ = $1;}
+            | negated_expression {      $$ = $1;}
+            | expression '+' expression {      $$ = new ExpressionNode("+", $1, $3);}
+            | expression '-' expression {      $$ = new ExpressionNode("-", $1, $3);}
+            | expression MUL expression {      $$ = new ExpressionNode("*", $1, $3);}
+            | expression '/' expression {      $$ = new ExpressionNode("/", $1, $3);}
+            | '-' expression  %prec UMINUS {      $$ = new ExpressionNode("-", nullptr, $2);}
+            | '|' expression  %prec UMINUS {      $$ = new ExpressionNode("|", nullptr, $2);}
+            | '(' expression ')' {      $$ = $2;}
 ;
 
-for_stmt:  for_header changes COLON block
+for_stmt:  for_header changes COLON block {    $$ = new ForStatementNode($1, $2, $4);}
 
-for_header: FOR IDENTIFIER IN 
+for_header: FOR IDENTIFIER IN {    $$ = new ForStatementNode($1, $2, $4);}
 
-changes: IDENTIFIER
-        |range
+changes: IDENTIFIER {    $$ = new ChangesNode($1);}
+        |range {$$ = new ChangesNode(""); // Assuming you want to handle range differently
+    $$->add($1);}
         
-range: RANGE '(' myrange ')'
-    | RANGE '(' myfunc ')'
+range: RANGE '(' myrange ')' {$$ = $3;}
+    | RANGE '(' myfunc ')' { $$ = $3; }
     
-myfunc: IDENTIFIER '(' ')'
+myfunc: IDENTIFIER '(' ')' {$$ = new MyFuncNode($1);}
 
-myrange : NUMBER 
-        | NUMBER ',' NUMBER
-        | NUMBER ',' NUMBER ',' NUMBER
+myrange : NUMBER { std::vector<int> values =$1;
+    $$ = new MyRangeNode(values);}
+        | NUMBER ',' NUMBER {std::vector<int> values = { $1, $3 };
+    $$ = new MyRangeNode(values);}
+        | NUMBER ',' NUMBER ',' NUMBER {
+            std::vector<int> values = { $1, $3, $5 };
+                                        $$ = new MyRangeNode(values);}
         
         
 
 
-try_stmt: TRY COLON block try_stmts;
+try_stmt: TRY COLON block try_stmts {    $$ = new TryStatementNode($3, $4);}
+;
 
-try_stmts: except_block
-         | else_stmt
-         | finally_block
-         | try_stmts finally_block
+try_stmts: except_block {  $$ = new TryStmtsNode();
+    $$->add($1);}
+         | else_stmt {$$ = new TryStmtsNode();
+    $$->add($1);}
+         | finally_block {$$ = new TryStmtsNode();
+    $$->add($1);}
+         | try_stmts finally_block { $1->add($2);
+    $$ = $1;}
          ;
 
 except_block
-    : EXCEPT IDENTIFIER COLON block
-    | except_block EXCEPT IDENTIFIER COLON block
+    : EXCEPT IDENTIFIER COLON block {    $$ = new ExceptBlockNode($2, $4);}
+    | except_block EXCEPT IDENTIFIER COLON block { $$ = $1;
+    $$->add(new ExceptBlockNode($3, $5));}
     ;
 
-finally_block:FINALLY COLON block;
+finally_block:FINALLY COLON block {    $$ = new FinallyBlockNode($3);}
+; 
 
 
 
 match_stmt
-    : MATCH expression COLON match_cases
+    : MATCH expression COLON match_cases {    $$ = new MatchStmtNode($2, $4);}
     ;
 
 match_cases
-    : match_case
-    | match_cases match_case
+    : match_case {$$ = new MatchCasesNode();
+    $$->add($1);}
+    | match_cases match_case { $1->add($2);
+    $$ = $1;}
     ;
 
 match_case
-    : CASE pattern_list COLON simple_stmt
+    : CASE pattern_list COLON simple_stmt {    $$ = new MatchCaseNode($2, $4);
+}
     ;
 
 pattern_list
-    : pattern 
-    | pattern_list ',' pattern
+    : pattern { $$ = new PatternListNode();
+    $$->add($1);}
+    | pattern_list ',' pattern { $1->add($3);
+    $$ = $1;}
     ;
 
     
 pattern:
-      expression
+      expression {    $$ = new PatternNode($1);
+}
     /* | tuple_pattern */
-    | list_pattern
-    | dict_pattern
-    | '_'
+    | list_pattern {        $$ = $1;
+
+}
+    | dict_pattern {    $$ = $1;}
+    | '_' {    $$ = new PatternNode(new LiteralNode("_"));}
     ;
 
 /* tuple_pattern: '(' pattern_list ')'
     ; */
 
 list_pattern
-    : '[' pattern_list ']'
+    : '[' pattern_list ']' {    $$ = new ListPatternNode($2);}
     ;
 
 dict_pattern
-    : '{' dict_pattern_entries '}'
+    : '{' dict_pattern_entries '}' {    $$ = new DictPatternNode($2);
+}
     ;
 
 dict_pattern_entries
-    : dict_pattern_entry 
-    | dict_pattern_entries ',' dict_pattern_entry
+    : dict_pattern_entry  {$$ = new DictPatternEntriesNode();
+    $$->add($1);}
+    | dict_pattern_entries ',' dict_pattern_entry { $1->add($3);
+    $$ = $1;}
     ;
 
 dict_pattern_entry
-    : pattern COLON pattern
+    : pattern COLON pattern {    $$ = new DictPatternEntryNode($1, $3);}
     ; 
 
 /* expression
@@ -521,7 +614,12 @@ int main(int argc, char **argv)
         else
         yyin=stdin;
      yyparse();
-     return 0;
+      if (root != NULL) {
+            AST ast(root);
+            ast.Print();
+      }
+      return 0;
+     
 }
 
 /* int yyerror(const char* s) {

@@ -28,8 +28,11 @@ Libraries needed to work with C language
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include "stack.c"
-#include "parser.tab.h"
+// #include "stack.c"
+// #include "parser.tab.h"
+#include "parser.hpp"
+#include "python_ast_node.hpp"
+
 %}
 
 /* Define token types as constants */
@@ -47,7 +50,7 @@ char firstChar;
 char *copyyytext;
 char* string_literal_value = NULL;
 int lno=1;
-struct StackNode* myStack = NULL;
+// struct StackNode* myStack = NULL;
 %}
 %x DEDENTATION
 
@@ -139,7 +142,7 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
 
 
 
-\r?\n       {
+\r?\n {
     printf("newline = %s in line = %d\n",yytext,yylineno);
     return NEWLINE;
 }
@@ -248,6 +251,8 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
                   }
 <STRING1>\" 	{
     				    printf("LITERAL_STRING : %s\n", string_literal_value);
+                                                yylval.astNode = new LiteralNode("string", "string", string_literal_value);
+
                 return STRING;
     				    BEGIN(INITIAL);  // Return to the initial start condition when a closing double quote is encountered
     				
@@ -281,6 +286,8 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
 
 <STRING2>\' 		{
     				    printf("LITERAL_STRING : %s\n", string_literal_value);
+                                                yylval.astNode = new LiteralNode("string", "string", string_literal_value);
+
                 return STRING;
     				    BEGIN(INITIAL);  // Return to the initial start condition when a closing double quote is encountered
 			}
@@ -338,6 +345,7 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
 
 <STRING3>\"{3}    {
     				    printf("LITERAL_STRING : %s\n", string_literal_value);
+                        yylval.astNode = new LiteralNode("string", "string", string_literal_value);
             return STRING;
             BEGIN(INITIAL);
         }
@@ -432,8 +440,8 @@ Delimiters ([\(\)\{\}\[\],:;.@])|(([\+\-\*/%@&\|^])|((\*{2}|<{2}|>{2})))=|(->)
 "or" { return OR; }
 "match" {return MATCH;}
 "case" {return CASE;}
-{IDENTI}           		{printf("IDENTIFIER = %s in line = %d\n",yytext,yylineno); return IDENTIFIER;}
-{NUMBER}                    {printf("number = %s in line = %d\n",yytext,yylineno); return NUMBER;}
+{IDENTI}           		{yylval.astNode = new IdentifierNode("IDENTIFIER", "Identifier", yytext); return IDENTIFIER;}
+{NUMBER}                    {yylval.astNode = new NumberNode("NUMBER", "number", atoi(yytext)); return NUMBER;}
 
 
 #.*$        				{	printf("COMMENTS3: %s in line = %d\n", yytext,yylineno); /* Skip comments on the same line as a statement. */ }
